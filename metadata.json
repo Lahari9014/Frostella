@@ -1,0 +1,6 @@
+{
+  "name": "Frostella - Luxury Custom Cake Studio",
+  "description": "A world-class luxury custom cake studio website with real-time custom specifications, dynamic price calculators, and AI cake visualizations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
