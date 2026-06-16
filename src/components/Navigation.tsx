@@ -1,6 +1,7 @@
 import React from "react";
-import { Cake, Sparkles, Heart, ShoppingBag, Search, Compass } from "lucide-react";
+import { Cake, Sparkles, Heart, ShoppingBag, Search, Compass, LogIn, LogOut, User as UserIcon } from "lucide-react";
 import { motion } from "motion/react";
+import { useAuth } from "./FirebaseProvider";
 
 interface NavigationProps {
   activeTab: string;
@@ -19,6 +20,7 @@ export default function Navigation({
   cartCount,
   openCart,
 }: NavigationProps) {
+  const { user, loginWithGoogle, logout } = useAuth();
   const links = [
     { id: "home", label: "Studio", icon: Compass },
     { id: "builder", label: "AI Custom Builder", icon: Sparkles },
@@ -39,26 +41,61 @@ export default function Navigation({
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           
           {/* Logo with motion animation */}
-          <motion.div 
-            onClick={() => setActiveTab("home")}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="flex items-center space-x-2 cursor-pointer group"
-            id="nav-logo"
-          >
-            <div className="relative p-2 rounded-full bg-[#FFE5D0]/60 group-hover:bg-[#E6D6FF]/40 transition-colors">
-              <Cake className="w-6 h-6 text-[#5A5A40]" />
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#FFE5D0] rounded-full animate-ping" />
+          <div className="flex items-center space-x-6">
+            <motion.div 
+              onClick={() => setActiveTab("home")}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="flex items-center space-x-2 cursor-pointer group"
+              id="nav-logo"
+            >
+              <div className="relative p-2 rounded-full bg-[#FFE5D0]/60 group-hover:bg-[#E6D6FF]/40 transition-colors">
+                <Cake className="w-6 h-6 text-[#5A5A40]" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#FFE5D0] rounded-full animate-ping" />
+              </div>
+              <div>
+                <h1 className="font-serif text-2xl font-bold italic tracking-tight text-[#5A5A40]">
+                  Frostella
+                </h1>
+                <p className="text-[9px] uppercase tracking-widest text-[#5A5A40]/70 -mt-1 font-semibold font-display">
+                  Luxury Cake Studio
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Auth section in logo area for prominence */}
+            <div className="hidden lg:flex items-center pl-4 border-l border-[#5A5A40]/10 h-8">
+              {user ? (
+                <div className="flex items-center space-x-3 group">
+                  <div className="relative">
+                    {user.photoURL ? (
+                      <img src={user.photoURL} alt={user.displayName || "User"} className="w-6 h-6 rounded-full border border-[#5A5A40]/20" />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-[#FFE5D0] flex items-center justify-center text-[#5A5A40]">
+                        <UserIcon className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                    <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full border border-white" />
+                  </div>
+                  <button 
+                    onClick={logout}
+                    className="text-[10px] uppercase tracking-widest font-bold text-[#5A5A40]/60 hover:text-[#5A5A40] transition-colors flex items-center space-x-1"
+                  >
+                    <LogOut className="w-3 h-3" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  onClick={loginWithGoogle}
+                  className="flex items-center space-x-1.5 text-[10px] uppercase tracking-widest font-bold text-[#5A5A40]/70 hover:text-[#5A5A40] transition-colors"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Couturier Login</span>
+                </button>
+              )}
             </div>
-            <div>
-              <h1 className="font-serif text-2xl font-bold italic tracking-tight text-[#5A5A40]">
-                Frostella
-              </h1>
-              <p className="text-[9px] uppercase tracking-widest text-[#5A5A40]/70 -mt-1 font-semibold font-display">
-                Luxury Cake Studio
-              </p>
-            </div>
-          </motion.div>
+          </div>
 
           {/* Navigation Links with animated dynamic slide background */}
           <nav className="hidden md:flex items-center space-x-1" id="nav-menu">

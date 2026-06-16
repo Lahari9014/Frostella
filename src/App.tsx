@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, Compass, Heart, Bookmark, Calendar, ArrowRight, Star, ShoppingBag, PhoneCall, ChevronRight, Cake, MapPin, Smile, Eye, ToggleLeft, Layers, Sparkle } from "lucide-react";
 import { motion } from "motion/react";
+import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import Navigation from "./components/Navigation";
 import AICakeBuilder from "./components/AICakeBuilder";
 import PremiumCollections from "./components/PremiumCollections";
@@ -15,6 +16,8 @@ import {
 import { CakeSpecification, SavedDesign, ChefNarrative, OrderItem, CollectionCake } from "./types";
 import { getUniqueCakeStyle } from "./lib/imageFilters";
 import SvgCakeFilters from "./components/SvgCakeFilters";
+import { useAuth } from "./components/FirebaseProvider";
+import { db, handleFirestoreError, OperationType } from "./lib/firebase";
 
 // Import custom 8K generated studio assets for background branding & front-page orders
 import aestheticCakeBg from "./assets/images/aesthetic_cake_bg_1781168939127.png";
@@ -29,36 +32,123 @@ import weddingCakeLux from "./assets/images/wedding_cake_lux_1781166503230.png";
 import floralPeachCake from "./assets/images/floral_peach_cake_1781166529233.png";
 
 export default function App() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("home");
   
-  // Persistence using local storage for a durable premium single-user experience
+  // States remain for UI responsiveness, but will be synced with Firestore when user is logged in
   const [wishlist, setWishlist] = useState<SavedDesign[]>([]);
   const [cart, setCart] = useState<OrderItem[]>([]);
   
   const [isWishlistOpen, setIsWishlistOpen] = useState<boolean>(false);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
 
-  // Load from localStorage on mount
+  // Firestore Syncing
   useEffect(() => {
-    try {
-      const savedWish = localStorage.getItem("frostella_wishlist");
-      const savedCart = localStorage.getItem("frostella_cart");
-      if (savedWish) setWishlist(JSON.parse(savedWish));
-      if (savedCart) setCart(JSON.parse(savedCart));
-    } catch (e) {
-      console.error("Local storage lookup failed safely.", e);
+    if (!user) {
+      // Load from localStorage for anonymous users
+      try {
+        const savedWish = localStorage.getItem("frostella_wishlist");
+        const savedCart = localStorage.getItem("frostella_cart");
+        if (savedWish) setWishlist(JSON.parse(savedWish));
+        if (savedCart) setCart(JSON.parse(savedCart));
+      } catch (e) {
+        console.error("Local storage lookup failed safely.", e);
+      }
+      return;
     }
-  }, []);
 
-  // Save to local storage helper
-  const saveWishlist = (newWish: SavedDesign[]) => {
-    setWishlist(newWish);
-    localStorage.setItem("frostella_wishlist", JSON.stringify(newWish));
+    // Sync Wishlist from Firestore
+    const wishlistQuery = query(collection(db, "saved_designs"), where("userId", "==", user.uid));
+    const unsubscribeWishlist = onSnapshot(wishlistQuery, (snapshot) => {
+      const designs = snapshot.docs.map(doc => doc.data() as SavedDesign);
+      setWishlist(designs);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "saved_designs");
+    });
+
+    // Sync Cart from Firestore (Simplified as a single document or collection)
+    const ordersQuery = query(collection(db, "orders"), where("userId", "==", user.uid), where("status", "==", "pending"));
+    const unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
+      const allItems: OrderItem[] = [];
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.items) allItems.push(...data.items);
+      });
+      setCart(allItems);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "orders");
+    });
+
+    return () => {
+      unsubscribeWishlist();
+      unsubscribeOrders();
+    };
+  }, [user]);
+
+  // Persistence helpers
+  const saveWishlist = async (newDesign: SavedDesign) => {
+    if (user) {
+      try {
+        await setDoc(doc(db, "saved_designs", newDesign.id), { ...newDesign, userId: user.uid });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `saved_designs/${newDesign.id}`);
+      }
+    } else {
+      const updated = [newDesign, ...wishlist];
+      setWishlist(updated);
+      localStorage.setItem("frostella_wishlist", JSON.stringify(updated));
+    }
   };
 
-  const saveCart = (newCart: OrderItem[]) => {
-    setCart(newCart);
-    localStorage.setItem("frostella_cart", JSON.stringify(newCart));
+  const handleRemoveFromWishlist = async (id: string) => {
+    if (user) {
+      try {
+        await deleteDoc(doc(db, "saved_designs", id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `saved_designs/${id}`);
+      }
+    } else {
+      const updated = wishlist.filter(d => d.id !== id);
+      setWishlist(updated);
+      localStorage.setItem("frostella_wishlist", JSON.stringify(updated));
+    }
+  };
+
+  const saveCartItem = async (newItem: OrderItem) => {
+    if (user) {
+      try {
+        // For simplicity in this bespoke app, we store pending cart items in a single user order doc or separate orders
+        // Here we'll use a separate doc per cart item for granular control
+        await setDoc(doc(db, "orders", newItem.id), { 
+          id: newItem.id,
+          userId: user.uid, 
+          items: [newItem], 
+          totalPrice: newItem.price,
+          status: "pending",
+          createdAt: new Date().toISOString()
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `orders/${newItem.id}`);
+      }
+    } else {
+      const updated = [newItem, ...cart];
+      setCart(updated);
+      localStorage.setItem("frostella_cart", JSON.stringify(updated));
+    }
+  };
+
+  const handleRemoveFromCart = async (id: string) => {
+    if (user) {
+      try {
+        await deleteDoc(doc(db, "orders", id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `orders/${id}`);
+      }
+    } else {
+      const updated = cart.filter(item => item.id !== id);
+      setCart(updated);
+      localStorage.setItem("frostella_cart", JSON.stringify(updated));
+    }
   };
 
   // 1. Save spec configuration to Wishlist/Saved Studio Designs
@@ -70,15 +160,11 @@ export default function App() {
       specification: spec,
       chefNarrative,
       customImageUrl,
-      priceEstimate: 65, // matching spec roughly, let builder handle it
+      priceEstimate: 65, 
       savedAt: new Date().toISOString()
     };
-    saveWishlist([newDesign, ...wishlist]);
+    saveWishlist(newDesign);
     alert(`✨ Saved your bespoke concept "${defaultTitle}" to your dream designs checklist!`);
-  };
-
-  const handleRemoveFromWishlist = (id: string) => {
-    saveWishlist(wishlist.filter(d => d.id !== id));
   };
 
   // 2. Schedule Design to Cart
@@ -86,7 +172,6 @@ export default function App() {
     const orderTitle = `Bespoke ${spec.occasion} ${spec.shape} Tower`;
     const toppingsJoined = spec.toppings.length > 0 ? spec.toppings.join(", ") : "None";
     
-    // Generate custom direct WhatsApp order link
     const whatsappQuery = `🌸 *FROSTELLA BESPOKE ORDER* 🌸
 I scheduled a reserve custom cake delivery!
 - Occasion: ${spec.occasion}
@@ -118,7 +203,7 @@ Please confirm my scheduled reservation! ✨`;
       whatsappLink: link
     };
 
-    saveCart([newOrderItem, ...cart]);
+    saveCartItem(newOrderItem);
     setIsCartOpen(true);
   };
 
@@ -151,12 +236,8 @@ Please log this booking request! ✨`;
       whatsappLink: link
     };
 
-    saveCart([newOrderItem, ...cart]);
+    saveCartItem(newOrderItem);
     setIsCartOpen(true);
-  };
-
-  const handleRemoveFromCart = (id: string) => {
-    saveCart(cart.filter(item => item.id !== id));
   };
 
   // Load preset config directly into active custom builder state
@@ -445,7 +526,7 @@ Please log this booking request! ✨`;
                               customerMessage: "Direct Homepage Selection",
                               whatsappLink: `https://wa.me/15550201010?text=${encodeURIComponent(`Hello Frostella! I'd like to reserve the Featured Masterpiece: *${item.name}*`)}`
                             };
-                            saveCart([orderItem, ...cart]);
+                            saveCartItem(orderItem);
                             setIsCartOpen(true);
                           }}
                           className="flex-1 py-2 text-center text-[10px] font-bold uppercase tracking-wider rounded-lg bg-[#5A5A40] hover:bg-[#6c6c52] text-white transition-colors cursor-pointer"
@@ -472,7 +553,7 @@ Please log this booking request! ✨`;
             <FlavorStructureShowcase 
               onLoadPreset={handleLoadPresetToBuilder}
               onAddToCart={(orderItem) => {
-                saveCart([orderItem, ...cart]);
+                saveCartItem(orderItem);
                 setIsCartOpen(true);
               }}
             />

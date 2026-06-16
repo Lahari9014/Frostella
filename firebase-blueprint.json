@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "SavedDesign": {
+      "title": "Saved Design",
+      "description": "A customized cake design saved by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "specification": { "type": "object" },
+        "chefNarrative": { "type": "object" },
+        "customImageUrl": { "type": "string" },
+        "priceEstimate": { "type": "number" },
+        "savedAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "name", "specification", "priceEstimate", "savedAt", "userId"]
+    },
+    "UserOrder": {
+      "title": "User Order",
+      "description": "An order placed by a customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "delivering", "completed", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "items", "totalPrice", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "saved_designs": {
+      "schema": "SavedDesign",
+      "description": "Collection of saved cake designs"
+    },
+    "orders": {
+      "schema": "UserOrder",
+      "description": "Collection of customer orders"
+    }
+  }
+}
